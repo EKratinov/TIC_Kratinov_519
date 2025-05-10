@@ -53,57 +53,53 @@ def decode_rle(encoded_sequence):
 
 
 def encode_lzw(sequence):
-    if not sequence:
-        return [], {}
-
-    unique_symbols = sorted(set(sequence))
-    dictionary = {symbol: i for i, symbol in enumerate(unique_symbols)}
-    reverse_dict = {i: symbol for symbol, i in dictionary.items()}
-    dict_size = len(dictionary)
-
+    dictionary = {}
+    for i in range(65536):
+        dictionary[chr(i)] = i
     current = ""
     result = []
-
-    for symbol in sequence:
-        new_str = current + symbol
+    size = 0
+    for c in sequence:
+        new_str = current + c
         if new_str in dictionary:
             current = new_str
         else:
             result.append(dictionary[current])
-            dictionary[new_str] = dict_size
-            dict_size += 1
-            current = symbol
+            dictionary[new_str] = len(dictionary)
+            element_bits = 16 if dictionary[current] < 65536 else math.ceil(math.log2(len(dictionary)))
+            current = c
+            with open("results_rle_lzw.txt", "a") as file:
+                file.write(f"Code: {dictionary[current]}, Element: {current}, bits: {element_bits}\n")
+                file.close()
+            size = size + element_bits
+    last = 16 if dictionary[current] < 65536 else math.ceil(math.log2(len(dictionary)))
+    size = size + last
+    with open("results_rle_lzw.txt", "a") as file:
+        file.write(f"Code: {dictionary[current]}, Element: {current}, Bits: {last}\n")
+    result.append(dictionary[current])
+    return result, size
 
-    if current:
-        result.append(dictionary[current])
 
-    return result, reverse_dict
-
-
-
-def decode_lzw(encoded_sequence, dictionary):
-    if not encoded_sequence:
-        return ""
-
-    dict_size = max(dictionary) + 1 if dictionary else 0
-    decoded = []
-
-    previous_code = encoded_sequence[0]
-    previous = dictionary.get(previous_code, "")
-    decoded.append(previous)
-
-    for code in encoded_sequence[1:]:
+def decode_lzw(sequence):
+    dictionary = {}
+    for i in range(65536):
+        dictionary[i] = chr(i)
+    result = ""
+    previous = None
+    current = ""
+    for code in sequence:
         if code in dictionary:
             current = dictionary[code]
+            result += current
+            if previous is not None:
+                dictionary[len(dictionary)] = previous + current[0]
+            previous = current
         else:
             current = previous + previous[0]
-
-        decoded.append(current)
-        dictionary[dict_size] = previous + current[0]
-        dict_size += 1
-        previous = current
-
-    return "".join(decoded)
+            result += current
+            dictionary[len(dictionary)] = current
+            previous = current
+    return result
 
 
 def save_results(original_sequences, filename="results_rle_lzw.txt"):
@@ -112,7 +108,6 @@ def save_results(original_sequences, filename="results_rle_lzw.txt"):
         for i, sequence in enumerate(original_sequences, start=1):
             entropy = calculate_entropy(sequence)
 
-            # RLE
             encoded_rle = encode_rle(sequence)
             decoded_rle = decode_rle(encoded_rle)
             len_original = len(sequence)
@@ -120,26 +115,21 @@ def save_results(original_sequences, filename="results_rle_lzw.txt"):
             len_decoded_rle = len(decoded_rle)
             compression_ratio_rle = round(len_original / len_encoded_rle, 2) if len_encoded_rle > 0 else "-"
 
-            # LZW
-            encoded_lzw, reverse_dict = encode_lzw(sequence)
-            decoded_lzw = decode_lzw(encoded_lzw, reverse_dict)
-            lzw_bit_length = sum(math.ceil(math.log2(code + 1)) for code in encoded_lzw) if encoded_lzw else 1
-            compression_ratio_lzw = round((len_original * 8) / lzw_bit_length, 2) if lzw_bit_length > 0 else "-"
-            len_encoded_lzw = len(encoded_lzw)
-            len_decoded_lzw = len(decoded_lzw)
+            encoded_result, size = encode_lzw(sequence)
+            decoded_result_LZW = decode_lzw(encoded_result)
+            len_encoded_lzw = len(encoded_result)
+            len_decoded_lzw = len(decoded_result_LZW)
+            compression_ratio_lzw = round((len_original * 8) / size, 2) if size > 0 else "-"
 
-            # Запис результатів
             file.write(f"Послідовність {i}:\n")
             file.write(f"Оригінальна: {sequence}\n")
             file.write(f"Ентропія: {entropy:.4f}\n")
-
             file.write(f"RLE кодування: {encoded_rle}\n")
             file.write(f"Декодована RLE: {decoded_rle}\n")
             file.write(f"Довжина оригіналу: {len_original}, довжина RLE: {len_encoded_rle}, довжина декодування RLE: {len_decoded_rle}\n")
             file.write(f"КС RLE: {compression_ratio_rle}\n")
-
-            file.write(f"LZW кодування: {encoded_lzw}\n")
-            file.write(f"Декодована LZW: {decoded_lzw}\n")
+            file.write(f"LZW кодування: {encoded_result}\n")
+            file.write(f"Декодована LZW: {decoded_result_LZW}\n")
             file.write(f"Довжина закодованої LZW: {len_encoded_lzw}, довжина декодованої LZW: {len_decoded_lzw}\n")
             file.write(f"КС LZW: {compression_ratio_lzw}\n\n")
 
@@ -160,21 +150,6 @@ def visualize_results(results):
     fig.savefig("Результати_стиснення.png")
 
 
-sequence = "AAAAABBBCCCCDDDDAAAA"
-encoded_rle = encode_rle(sequence)
-decoded_rle = decode_rle(encoded_rle)
-original_sequences = read_sequences("results_sequence.txt")
-
-print(original_sequences)
-
 original_sequences = read_sequences("results_sequence.txt")
 results = save_results(original_sequences)
 visualize_results(results)
-
-test_sequence = "ABABA"
-encoded_test, reverse_dict = encode_lzw(test_sequence)
-decoded_test = decode_lzw(encoded_test, reverse_dict)
-
-print("Оригинал:", test_sequence)
-print("Закодированная:", encoded_test)
-print("Декодированная:", decoded_test)
